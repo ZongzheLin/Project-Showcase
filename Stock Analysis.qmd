@@ -1,0 +1,161 @@
+---
+title: "FDAP"
+format: html
+editor: visual
+---
+
+```{r}
+library(dplyr)
+library(zoo)
+library(TTR)
+library(tidyr)
+library(ggplot2)
+```
+
+```{r}
+boeing_data <- read.csv("Boeing.csv")
+
+head(boeing_data)
+```
+
+```{r}
+# Convert the Date column to Date format
+boeing_data$Date <- as.Date(boeing_data$Date, format="%Y-%m-%d")
+
+# Calculate Daily Returns as a percentage
+boeing_data <- boeing_data %>%
+  arrange(Date) %>%
+  mutate(Daily_Return = (Close - lag(Close)) / lag(Close) * 100)
+
+# Calculate 7-day and 30-day moving averages for the Close prices
+boeing_data <- boeing_data %>%
+  mutate(MA_7 = rollmean(Close, 7, fill = NA, align = "right"),
+         MA_30 = rollmean(Close, 30, fill = NA, align = "right"))
+
+# Calculate 7-day and 30-day rolling standard deviation of daily returns as volatility measures
+boeing_data <- boeing_data %>%
+  mutate(Volatility_7 = rollapply(Daily_Return, 7, sd, fill = NA, align = "right"),
+         Volatility_30 = rollapply(Daily_Return, 30, sd, fill = NA, align = "right"))
+
+# Cumulative Returns
+boeing_data <- boeing_data %>%
+  mutate(Daily_Return = replace_na(Daily_Return, 0)) %>%  
+  mutate(Cumulative_Return = cumprod(1 + Daily_Return / 100) - 1)
+
+
+#Relative Strength Indes(RSI)
+boeing_data$RSI_14 <- RSI(boeing_data$Close, n = 14)
+
+#Exponential Moving Average (EMA)
+boeing_data$EMA_7 <- EMA(boeing_data$Close, n = 7)
+boeing_data$EMA_30 <- EMA(boeing_data$Close, n = 30)
+
+# View the first few rows of the data to check the calculations
+head(boeing_data)
+```
+
+```{r}
+# Meeting 
+# Profile Plot
+# Closing Price Over Time
+ggplot(boeing_data, aes(x = Date, y = Close)) +
+  geom_line(color = "blue") +
+  labs(title = "Boeing Closing Price Over Time", x = "Date", y = "Closing Price")
+
+
+# Volatility Over Time
+ggplot(boeing_data, aes(x = Date)) +
+  geom_line(aes(y = Volatility_7, color = "7-Day Volatility")) +
+  geom_line(aes(y = Volatility_30, color = "30-Day Volatility")) +
+  labs(title = "Boeing Stock Volatility Over Time", x = "Date", y = "Volatility") +
+  scale_color_manual(values = c("7-Day Volatility" = "purple", "30-Day Volatility" = "darkred"))
+
+```
+
+```{r}
+# Meeting 
+# Empirical Summary Plot
+# Histogram of Daily Returns
+ggplot(boeing_data, aes(x = Daily_Return)) +
+  geom_histogram(binwidth = 0.5, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Daily Returns", x = "Daily Return (%)", y = "Frequency")
+
+# Histogram of 7-Day Volatility
+ggplot(boeing_data, aes(x = Volatility_7)) +
+  geom_histogram(binwidth = 0.1, fill = "lightcoral", color = "black") +
+  labs(title = "Distribution of 7-Day Volatility", x = "7-Day Volatility", y = "Frequency")
+
+```
+
+```{r}
+# Meeting 
+# Fit a linear model predicting Daily_Return
+model <- lm(Daily_Return ~ Volume + MA_7 + RSI_14, data = boeing_data)
+
+# Output the summary of the model
+summary(model)
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Import the datasets
+boeing_data <- read.csv("Boeing.csv")
+airbus_data <- read.csv("Airbus.csv")
+lmt_data <- read.csv("LMT.csv")
+
+# Standardize column names and add a "Stock" column
+boeing_data <- boeing_data %>%
+  rename(Price = Close) %>%  # Rename Close to Price
+  mutate(Stock = "Boeing")
+
+airbus_data <- airbus_data %>%
+  rename(Price = Close) %>%  # Rename Close to Price
+  mutate(Stock = "Airbus")
+
+lmt_data <- lmt_data %>%
+  rename(Price = Close) %>%  # Rename Close to Price
+  mutate(Stock = "Lockheed Martin")
+
+# Combine all datasets into one
+stock_data <- bind_rows(boeing_data, airbus_data, lmt_data)
+
+# Ensure the Date column is in date format
+stock_data$Date <- as.Date(stock_data$Date, format = "%Y-%m-%d")
+
+# Filter and prepare the data for plotting
+stock_data <- stock_data %>%
+  filter(Stock %in% c("Boeing", "Airbus", "Lockheed Martin")) %>%
+  mutate(Stock = factor(Stock, levels = c("Boeing", "Airbus", "Lockheed Martin")))
+
+# Create time-series plot using linewidth (for ggplot2 >= 3.4.0)
+ggplot(stock_data, aes(x = Date, y = Price, color = Stock)) +
+  geom_line(linewidth = 1) +
+  labs(
+    title = "Time-Series Plot of Stock Prices (2019-2024)",
+    x = "Date",
+    y = "Stock Price",
+    color = "Company"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+
+
+```
+
+```{r}
+
+# Import the data
+boeing_data <- read.csv("Boeing.csv")
+airbus_data <- read.csv("Airbus.csv")
+lmt_data <- read.csv("LMT.csv")
+
+# Display the structure of each dataset to ensure proper loading
+str(boeing_data)
+str(airbus_data)
+str(lmt_data)
+
+```
