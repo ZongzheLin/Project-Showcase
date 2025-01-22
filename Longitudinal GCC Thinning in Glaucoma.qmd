@@ -1,0 +1,1313 @@
+---
+title: "ADAP"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+```{r}
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(lme4) # For mixed-effects modeling
+library(readr)
+
+```
+
+```{r}
+# Import the dataset
+file_name <- "ADAP_Macula_GCC_dataset.csv"
+data <- read_csv(file_name)
+
+# Check the structure of the dataset
+str(data)
+
+# Summarize the dataset
+summary(data)
+
+# Exploratory Data Analysis (EDA)
+# 1. Distribution of GCC thickness
+ggplot(data, aes(x = GCC)) +
+  geom_histogram(bins = 30, fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(title = "Distribution of GCC Thickness", x = "GCC Thickness (microns)", y = "Frequency")
+
+# 2. GCC thickness over time
+agg_data <- data %>%
+  group_by(time) %>%
+  summarize(mean_GCC = mean(GCC, na.rm = TRUE), sd_GCC = sd(GCC, na.rm = TRUE))
+
+ggplot(agg_data, aes(x = time, y = mean_GCC)) +
+  geom_line(color = "blue", size = 1) +
+  geom_ribbon(aes(ymin = mean_GCC - sd_GCC, ymax = mean_GCC + sd_GCC), alpha = 0.2) +
+  theme_minimal() +
+  labs(title = "Mean GCC Thickness Over Time", x = "Time (years)", y = "Mean GCC Thickness (microns)")
+
+# 3. Individual GCC trends
+ggplot(data, aes(x = time, y = GCC, group = id)) +
+  geom_line(alpha = 0.3) +
+  theme_minimal() +
+  labs(title = "Individual GCC Thickness Trends", x = "Time (years)", y = "GCC Thickness (microns)")
+
+# Check for missing values
+colSums(is.na(data))
+
+# Basic statistics on GCC loss
+# Calculate rate of change in GCC for each individual
+data <- data %>%
+  group_by(id) %>%
+  arrange(time) %>%
+  mutate(GCC_change = GCC - lag(GCC),
+         Rate_of_Change = GCC_change / (time - lag(time)))
+
+# Summary of GCC rate of change
+data %>%
+  summarise(mean_rate = mean(Rate_of_Change, na.rm = TRUE),
+            sd_rate = sd(Rate_of_Change, na.rm = TRUE),
+            min_rate = min(Rate_of_Change, na.rm = TRUE),
+            max_rate = max(Rate_of_Change, na.rm = TRUE))
+
+```
+
+```{r}
+# Exploratory Data Analysis (EDA)
+
+# 1. Distribution of GCC thickness
+ggplot(data, aes(x = GCC)) +
+  geom_histogram(bins = 30, fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(title = "Distribution of GCC Thickness", x = "GCC Thickness (microns)", y = "Frequency")
+
+# 2. Mean GCC thickness over time (population-level trend)
+agg_data <- data %>%
+  group_by(time) %>%
+  summarize(mean_GCC = mean(GCC, na.rm = TRUE), sd_GCC = sd(GCC, na.rm = TRUE))
+
+ggplot(agg_data, aes(x = time, y = mean_GCC)) +
+  geom_line(color = "blue", size = 1) +
+  geom_ribbon(aes(ymin = mean_GCC - sd_GCC, ymax = mean_GCC + sd_GCC), alpha = 0.2) +
+  theme_minimal() +
+  labs(title = "Mean GCC Thickness Over Time", x = "Time (years)", y = "Mean GCC Thickness (microns)")
+
+# 3. Individual GCC thickness trends
+ggplot(data, aes(x = time, y = GCC, group = id)) +
+  geom_line(alpha = 0.3) +
+  theme_minimal() +
+  labs(title = "Individual GCC Thickness Trends", x = "Time (years)", y = "GCC Thickness (microns)")
+
+# 4. Summary Statistics
+# Summary of GCC thickness
+summary(data$GCC)
+
+# Summary of time
+summary(data$time)
+
+# Check for missing values
+missing_values <- colSums(is.na(data))
+print("Missing values in each column:")
+print(missing_values)
+
+# Save the aggregated data for later use
+write.csv(agg_data, "agg_data_summary.csv", row.names = FALSE)
+
+```
+
+```{r}
+ggplot(agg_data, aes(x = time, y = mean_GCC)) +
+  geom_line(color = "blue", size = 1) +
+  geom_ribbon(aes(ymin = mean_GCC - sd_GCC, ymax = mean_GCC + sd_GCC), alpha = 0.2) +
+  theme_minimal() +
+  labs(
+    title = "Figure 1: Mean GCC Thickness Over Time",
+    x = "Time (years)",
+    y = "Mean GCC Thickness (microns)",
+  )
+
+```
+
+```{r}
+# Load necessary library
+library(lme4)
+
+# Fit a linear mixed-effects model
+# Fixed effect: time
+# Random effect: intercept for each individual (id)
+time_trend_model <- lmer(GCC ~ time + (1 | id), data = data)
+
+# Summary of the model
+summary(time_trend_model)
+
+# Visualize the population time trend
+predicted_data <- data %>%
+  group_by(time) %>%
+  summarize(mean_predicted_GCC = predict(time_trend_model, newdata = data.frame(time = unique(time)), re.form = NA))
+
+ggplot(data, aes(x = time, y = GCC)) +
+  geom_point(alpha = 0.2, color = "gray") +
+  geom_line(data = predicted_data, aes(x = time, y = mean_predicted_GCC), color = "blue", size = 1) +
+  theme_minimal() +
+  labs(
+    title = "Figure 2: Population Time Trend for GCC Thickness",
+    x = "Time (years)",
+    y = "Predicted GCC Thickness (microns)"
+  )
+
+```
+
+```{r}
+# Load the necessary library
+library(nlme)
+
+# Fit models with different covariance structures
+models <- list()
+
+# 1. Random Intercept Only (RI)
+models$RI <- lme(fixed = GCC ~ time, random = ~ 1 | id, data = data, method = "REML")
+
+# 2. Random Intercept and Slope (RIAS)
+models$RIAS <- lme(fixed = GCC ~ time, random = ~ time | id, data = data, method = "REML")
+
+# 3. Compound Symmetry (CS)
+models$CS <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corCompSymm(form = ~ time | id), data = data, method = "REML")
+
+# 4. Autoregressive of order 1 (AR(1))
+models$AR1 <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corAR1(form = ~ time | id), data = data, method = "REML")
+
+# 5. Unstructured (UN)
+models$UN <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corSymm(form = ~ time | id), data = data, method = "REML")
+
+# 6. ARMA(1,1)
+models$ARMA11 <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corARMA(p = 1, q = 1, form = ~ time | id), data = data, method = "REML")
+
+# 7. ARMA(2,1)
+models$ARMA21 <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corARMA(p = 2, q = 1, form = ~ time | id), data = data, method = "REML")
+
+# 8. ARMA(2,0)
+models$ARMA20 <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corARMA(p = 2, q = 0, form = ~ time | id), data = data, method = "REML")
+
+# Compare models using AIC
+model_comparison <- data.frame(
+  Model = names(models),
+  AIC = sapply(models, AIC)
+)
+
+# Sort models by AIC (lower is better)
+model_comparison <- model_comparison[order(model_comparison$AIC), ]
+
+# Print the comparison table
+print(model_comparison)
+
+```
+
+```{r}
+# Load the necessary library
+library(nlme)
+library(dplyr)
+
+# Transform `time` into consecutive integers for each individual
+data <- data %>%
+  group_by(id) %>%
+  mutate(time_int = rank(time)) %>%
+  ungroup()
+
+# Fit models with different covariance structures
+models <- list()
+
+# 1. Random Intercept Only (RI)
+models$RI <- lme(fixed = GCC ~ time, random = ~ 1 | id, data = data, method = "REML")
+
+# 2. Random Intercept and Slope (RIAS)
+models$RIAS <- lme(fixed = GCC ~ time, random = ~ time | id, data = data, method = "REML")
+
+# 3. Compound Symmetry (CS)
+models$CS <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corCompSymm(form = ~ time | id), data = data, method = "REML")
+
+# 4. Autoregressive of order 1 (AR(1))
+models$AR1 <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corAR1(form = ~ time | id), data = data, method = "REML")
+
+
+# 6. ARMA(1,1)
+models$ARMA11 <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corARMA(p = 1, q = 1, form = ~ time | id), data = data, method = "REML")
+
+# 7. ARMA(2,1)
+models$ARMA21 <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corARMA(p = 2, q = 1, form = ~ time | id), data = data, method = "REML")
+
+# 8. ARMA(2,0)
+models$ARMA20 <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corARMA(p = 2, q = 0, form = ~ time | id), data = data, method = "REML")
+
+# Compare models using AIC
+model_comparison <- data.frame(
+  Model = names(models),
+  AIC = sapply(models, AIC)
+)
+
+# Sort models by AIC (lower is better)
+model_comparison <- model_comparison[order(model_comparison$AIC), ]
+
+# Print the comparison table
+print(model_comparison)
+```
+
+```{r}
+# Extract fixed effects (population average) from the RIAS model
+fixed_effects <- fixef(models$RIAS)
+population_rate_of_change <- fixed_effects["time"]
+
+# Extract random effects (individual variability) from the RIAS model
+random_effects <- ranef(models$RIAS)
+
+# Calculate the range of individual slopes (rate of change)
+individual_slopes <- random_effects$id$time + population_rate_of_change
+slope_summary <- summary(individual_slopes)
+
+# Print the results
+cat("Population Average Rate of GCC Loss:\n")
+cat(sprintf(" %.3f microns per year\n", population_rate_of_change))
+
+cat("\nIndividual Variability in Rate of GCC Loss:\n")
+cat(sprintf(" Range: %.3f to %.3f microns per year\n", min(individual_slopes), max(individual_slopes)))
+cat(sprintf(" Mean: %.3f microns per year\n", mean(individual_slopes)))
+cat(sprintf(" SD: %.3f microns per year\n", sd(individual_slopes)))
+
+# Optional: Plot the distribution of individual rates of change
+library(ggplot2)
+ggplot(data.frame(Slope = individual_slopes), aes(x = Slope)) +
+  geom_histogram(binwidth = 0.5, fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(
+    title = "Distribution of Individual Rates of GCC Loss",
+    x = "Rate of GCC Loss (microns/year)",
+    y = "Frequency"
+  )
+
+```
+
+```{r}
+# Load the necessary library
+library(nlme)
+library(dplyr)
+library(ggplot2)
+
+# Transform `time` into consecutive integers for each individual
+data <- data %>%
+  group_by(id) %>%
+  mutate(time_int = rank(time)) %>%
+  ungroup()
+
+# Fit Random Intercept and Slope (RIAS) model
+RIAS_model <- lme(fixed = GCC ~ time, random = ~ time | id, data = data, method = "REML")
+
+# Extract fixed effects (population average)
+population_rate_of_change <- fixef(RIAS_model)["time"]
+
+# Extract random effects (individual variability)
+random_effects <- ranef(RIAS_model)
+
+# Calculate individual slopes (rate of GCC loss for each patient)
+if ("time" %in% colnames(random_effects$id)) {
+  individual_slopes <- random_effects$id$time + population_rate_of_change
+
+  # Summary statistics for individual slopes
+  slope_summary <- summary(individual_slopes)
+  cat("Population Average Rate of GCC Loss:\n")
+  cat(sprintf(" %.3f microns per year\n", population_rate_of_change))
+
+  cat("\nIndividual Variability in Rate of GCC Loss:\n")
+  cat(sprintf(" Range: %.3f to %.3f microns per year\n", min(individual_slopes), max(individual_slopes)))
+  cat(sprintf(" Mean: %.3f microns per year\n", mean(individual_slopes)))
+  cat(sprintf(" SD: %.3f microns per year\n", sd(individual_slopes)))
+
+  # Plot the distribution of individual slopes
+  ggplot(data.frame(Slope = individual_slopes), aes(x = Slope)) +
+    geom_histogram(binwidth = 0.5, fill = "blue", color = "black") +
+    theme_minimal() +
+    labs(
+      title = "Distribution of Individual Rates of GCC Loss",
+      x = "Rate of GCC Loss (microns/year)",
+      y = "Frequency"
+    )
+} else {
+  cat("Random slope for 'time' not found in the random effects!\n")
+}
+
+```
+
+```{r}
+# Fit Random Intercept and Slope (RIAS) model with correct specification
+RIAS_model <- lme(
+  fixed = GCC ~ time, 
+  random = ~ time | id,  # Random slope for time and random intercept
+  data = data, 
+  method = "REML"
+)
+
+# Extract fixed effects (population average rate of change)
+population_rate_of_change <- fixef(RIAS_model)["time"]
+
+# Extract random effects for individual slopes
+random_effects <- ranef(RIAS_model)
+
+# Check if 'time' exists in random effects
+if ("time" %in% colnames(random_effects$id)) {
+  # Calculate individual slopes (rate of GCC loss)
+  individual_slopes <- random_effects$id$time + population_rate_of_change
+  
+  # Summary statistics for individual slopes
+  slope_summary <- summary(individual_slopes)
+  cat("Population Average Rate of GCC Loss:\n")
+  cat(sprintf(" %.3f microns per year\n", population_rate_of_change))
+  
+  cat("\nIndividual Variability in Rate of GCC Loss:\n")
+  cat(sprintf(" Range: %.3f to %.3f microns per year\n", min(individual_slopes), max(individual_slopes)))
+  cat(sprintf(" Mean: %.3f microns per year\n", mean(individual_slopes)))
+  cat(sprintf(" SD: %.3f microns per year\n", sd(individual_slopes)))
+  
+  # Plot the distribution of individual slopes
+  ggplot(data.frame(Slope = individual_slopes), aes(x = Slope)) +
+    geom_histogram(binwidth = 0.5, fill = "blue", color = "black") +
+    theme_minimal() +
+    labs(
+      title = "Distribution of Individual Rates of GCC Loss",
+      x = "Rate of GCC Loss (microns/year)",
+      y = "Frequency"
+    )
+} else {
+  cat("Random slope for 'time' not found in the random effects!\n")
+}
+
+```
+
+```{r}
+# Load the necessary library
+library(nlme)
+library(dplyr)
+library(ggplot2)
+
+# Transform `time` into consecutive integers for each individual
+data <- data %>%
+  group_by(id) %>%
+  mutate(time_int = rank(time)) %>%
+  ungroup()
+
+# Fit Random Intercept and Slope (RIAS) model with proper random slope specification
+RIAS_model <- lme(
+  fixed = GCC ~ time, 
+  random = list(id = pdDiag(~ time)), # Ensure both random intercept and slope for 'time'
+  data = data, 
+  method = "REML"
+)
+
+# Extract fixed effects (population average rate of change)
+population_rate_of_change <- fixef(RIAS_model)["time"]
+
+# Extract random effects for individual slopes
+random_effects <- ranef(RIAS_model)
+
+# Calculate individual slopes (rate of GCC loss for each patient)
+if ("time" %in% colnames(random_effects$id)) {
+  individual_slopes <- random_effects$id$time + population_rate_of_change
+
+  # Summary statistics for individual slopes
+  cat("Population Average Rate of GCC Loss:\n")
+  cat(sprintf(" %.3f microns per year\n", population_rate_of_change))
+
+  cat("\nIndividual Variability in Rate of GCC Loss:\n")
+  cat(sprintf(" Range: %.3f to %.3f microns per year\n", min(individual_slopes), max(individual_slopes)))
+  cat(sprintf(" Mean: %.3f microns per year\n", mean(individual_slopes)))
+  cat(sprintf(" SD: %.3f microns per year\n", sd(individual_slopes)))
+
+  # Plot the distribution of individual slopes
+  ggplot(data.frame(Slope = individual_slopes), aes(x = Slope)) +
+    geom_histogram(binwidth = 0.5, fill = "blue", color = "black") +
+    theme_minimal() +
+    labs(
+      title = "Distribution of Individual Rates of GCC Loss",
+      x = "Rate of GCC Loss (microns/year)",
+      y = "Frequency"
+    )
+} else {
+  cat("Random slope for 'time' not found in the random effects!\n")
+}
+
+```
+
+```{r}
+# Load necessary libraries
+library(nlme)
+library(dplyr)
+library(ggplot2)
+
+# Prepare the data: ensure time is properly scaled and unique per individual
+data <- data %>%
+  group_by(id) %>%
+  mutate(time_scaled = time - min(time)) %>% # Scale time to start from 0 for each individual
+  ungroup()
+
+# Fit Random Intercept and Slope (RIAS) model with proper random slope specification
+RIAS_model <- lme(
+  fixed = GCC ~ time, 
+  random = ~ time | id, # Specify random intercept and slope for 'time'
+  data = data, 
+  method = "REML",
+  control = lmeControl(msMaxIter = 100, opt = "optim") # Increase iteration limit for better convergence
+)
+
+# Extract fixed effects (population average rate of change)
+population_rate_of_change <- fixef(RIAS_model)["time"]
+
+# Extract random effects for individual slopes
+random_effects <- ranef(RIAS_model)
+
+# Check and calculate individual slopes
+if ("time" %in% colnames(random_effects$id)) {
+  # Combine population fixed effect and individual random slopes
+  individual_slopes <- random_effects$id$time + population_rate_of_change
+  
+  # Summary statistics for individual slopes
+  cat("Population Average Rate of GCC Loss:\n")
+  cat(sprintf(" %.3f microns per year\n", population_rate_of_change))
+  
+  cat("\nIndividual Variability in Rate of GCC Loss:\n")
+  cat(sprintf(" Range: %.3f to %.3f microns per year\n", min(individual_slopes), max(individual_slopes)))
+  cat(sprintf(" Mean: %.3f microns per year\n", mean(individual_slopes)))
+  cat(sprintf(" SD: %.3f microns per year\n", sd(individual_slopes)))
+  
+  # Plot the distribution of individual slopes
+  ggplot(data.frame(Slope = individual_slopes), aes(x = Slope)) +
+    geom_histogram(binwidth = 0.5, fill = "blue", color = "black") +
+    theme_minimal() +
+    labs(
+      title = "Distribution of Individual Rates of GCC Loss",
+      x = "Rate of GCC Loss (microns/year)",
+      y = "Frequency"
+    )
+} else {
+  cat("Random slope for 'time' not found in the random effects! Re-check model specification.\n")
+}
+
+```
+
+```{r}
+# Load necessary libraries
+library(nlme)
+library(dplyr)
+library(ggplot2)
+
+# Prepare the data: ensure time is properly scaled and unique per individual
+data <- data %>%
+  group_by(id) %>%
+  mutate(time_scaled = time - min(time)) %>% # Scale time to start from 0 for each individual
+  ungroup()
+
+# Fit Random Intercept and Slope (RIAS) model with proper random slope specification
+RIAS_model <- lme(
+  fixed = GCC ~ time, 
+  random = ~ time | id, # Specify random intercept and slope for 'time'
+  data = data, 
+  method = "REML",
+  control = lmeControl(msMaxIter = 100, opt = "optim") # Increase iteration limit for better convergence
+)
+
+# Extract fixed effects (population average rate of change)
+population_rate_of_change <- fixef(RIAS_model)["time"]
+
+# Extract random effects for individual slopes
+random_effects <- ranef(RIAS_model)
+
+# Check and calculate individual slopes
+if ("time" %in% colnames(random_effects$id)) {
+  # Combine population fixed effect and individual random slopes
+  individual_slopes <- random_effects$id$time + population_rate_of_change
+  
+  # Summary statistics for individual slopes
+  cat("Population Average Rate of GCC Loss:\n")
+  cat(sprintf(" %.3f microns per year\n", population_rate_of_change))
+  
+  cat("\nIndividual Variability in Rate of GCC Loss:\n")
+  cat(sprintf(" Range: %.3f to %.3f microns per year\n", min(individual_slopes), max(individual_slopes)))
+  cat(sprintf(" Mean: %.3f microns per year\n", mean(individual_slopes)))
+  cat(sprintf(" SD: %.3f microns per year\n", sd(individual_slopes)))
+  
+  # Plot the distribution of individual slopes
+  ggplot(data.frame(Slope = individual_slopes), aes(x = Slope)) +
+    geom_histogram(binwidth = 0.5, fill = "blue", color = "black") +
+    theme_minimal() +
+    labs(
+      title = "Distribution of Individual Rates of GCC Loss",
+      x = "Rate of GCC Loss (microns/year)",
+      y = "Frequency"
+    )
+} else {
+  cat("Random slope for 'time' not found in the random effects! Re-check model specification.\n")
+}
+
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+
+# Calculate population average rate of GCC loss using linear regression
+population_model <- lm(GCC ~ time, data = data)
+
+# Extract the fixed effect for time (slope)
+population_rate_of_change <- coef(population_model)["time"]
+
+# Estimate individual slopes using linear regression for each patient
+data_individual_slopes <- data %>%
+  group_by(id) %>%
+  summarize(
+    individual_slope = coef(lm(GCC ~ time))["time"], # Slope for each individual
+    .groups = "drop"
+  )
+
+# Summarize individual slopes
+slope_summary <- data_individual_slopes %>%
+  summarize(
+    min_slope = min(individual_slope),
+    max_slope = max(individual_slope),
+    mean_slope = mean(individual_slope),
+    sd_slope = sd(individual_slope)
+  )
+
+# Print results
+cat("Population Average Rate of GCC Loss:\n")
+cat(sprintf(" %.3f microns per year\n", population_rate_of_change))
+
+cat("\nIndividual Variability in Rate of GCC Loss:\n")
+cat(sprintf(" Range: %.3f to %.3f microns per year\n", slope_summary$min_slope, slope_summary$max_slope))
+cat(sprintf(" Mean: %.3f microns per year\n", slope_summary$mean_slope))
+cat(sprintf(" SD: %.3f microns per year\n", slope_summary$sd_slope))
+
+# Plot distribution of individual slopes
+ggplot(data_individual_slopes, aes(x = individual_slope)) +
+  geom_histogram(binwidth = 0.5, fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(
+    title = "Figure 4: Distribution of Individual Rates of GCC Loss",
+    x = "Rate of GCC Loss (microns/year)",
+    y = "Frequency"
+  )
+
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+
+# Investigate the relationship between initial GCC thickness and rate of GCC loss
+# Calculate individual slopes for each patient
+individual_slopes <- data %>%
+  group_by(id) %>%
+  summarize(
+    initial_GCC = first(GCC), # Initial GCC thickness
+    individual_slope = coef(lm(GCC ~ time))["time"], # Rate of GCC loss
+    .groups = "drop"
+  )
+
+# Fit a linear model to examine the relationship between initial GCC and rate of GCC loss
+relationship_model <- lm(individual_slope ~ initial_GCC, data = individual_slopes)
+
+# Summary of the relationship model
+relationship_summary <- summary(relationship_model)
+print(relationship_summary)
+
+# Visualize the relationship between initial GCC and rate of GCC loss
+ggplot(individual_slopes, aes(x = initial_GCC, y = individual_slope)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, color = "blue") +
+  theme_minimal() +
+  labs(
+    title = "Figure 5: Relationship Between Initial GCC and Rate of GCC Loss",
+    x = "Initial GCC Thickness (microns)",
+    y = "Rate of GCC Loss (microns/year)"
+  )
+
+```
+
+```{r}
+# Load necessary libraries
+library(nlme)
+library(ggplot2)
+
+# Base Model: Population intercept and slope only
+base_model <- lme(
+  fixed = GCC ~ time, 
+  random = ~ time | id,  # Random intercept and slope
+  data = data,
+  method = "REML"
+)
+
+# Include Age: Age-adjusted model
+age_model <- lme(
+  fixed = GCC ~ time + base_age,  # Add age as a fixed effect
+  random = ~ time | id,      # Random intercept and slope
+  data = data,
+  method = "REML"
+)
+
+# Summarize and compare models
+base_summary <- summary(base_model)
+age_summary <- summary(age_model)
+
+# Print model summaries
+cat("Base Model (No Age):\n")
+print(base_summary)
+
+cat("\nAge-Adjusted Model:\n")
+print(age_summary)
+
+# Extract fixed effects for interpretation
+fixed_effects_age <- fixef(age_model)
+cat("\nFixed Effects in Age-Adjusted Model:\n")
+print(fixed_effects_age)
+
+# Visualize the effects of age on GCC trends
+ggplot(data, aes(x = time, y = GCC, color = bage)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", aes(group = id), se = FALSE, color = "blue", size = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Effect of Age on GCC Trends",
+    x = "Time (years)",
+    y = "GCC Thickness (microns)",
+    color = "Age"
+  )
+
+```
+
+```{r}
+# Load necessary libraries
+library(nlme)
+library(ggplot2)
+
+# Base Model: Population intercept and slope only
+base_model <- lme(
+  fixed = GCC ~ time, 
+  random = ~ time | id,  # Random intercept and slope
+  data = data,
+  method = "REML"
+)
+
+# Include Age: Age-adjusted model
+age_model <- lme(
+  fixed = GCC ~ time + base_age,  # Add base_age as a fixed effect
+  random = ~ time | id,           # Random intercept and slope
+  data = data,
+  method = "REML"
+)
+
+# Summarize and compare models
+base_summary <- summary(base_model)
+age_summary <- summary(age_model)
+
+# Print model summaries
+cat("Base Model (No Age):\n")
+print(base_summary)
+
+cat("\nAge-Adjusted Model:\n")
+print(age_summary)
+
+# Extract fixed effects for interpretation
+fixed_effects_age <- fixef(age_model)
+cat("\nFixed Effects in Age-Adjusted Model:\n")
+print(fixed_effects_age)
+
+# Visualize the effects of age on GCC trends
+ggplot(data, aes(x = time, y = GCC, color = base_age)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", aes(group = id), se = FALSE, color = "blue", size = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Figure 6: Effect of Age on GCC Trends",
+    x = "Time (years)",
+    y = "GCC Thickness (microns)",
+    color = "Base Age"
+  )
+
+```
+
+```{r}
+# Load required libraries
+library(tidyverse)
+
+# Import the dataset
+file_name <- "ADAP_Macula_GCC_dataset.csv"
+data <- read_csv(file_name)
+
+# Check the structure of the dataset
+str(data)
+
+# Summarize the dataset
+summary(data)
+
+# Check for missing values
+colSums(is.na(data))
+
+# 1. Distribution of GCC Thickness
+ggplot(data, aes(x = GCC)) +
+  geom_histogram(bins = 30, fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(
+    title = "Distribution of GCC Thickness",
+    x = "GCC Thickness (microns)",
+    y = "Frequency"
+  )
+
+# 2. Mean GCC Thickness Over Time
+agg_data <- data %>%
+  group_by(time) %>%
+  summarize(
+    mean_GCC = mean(GCC, na.rm = TRUE),
+    sd_GCC = sd(GCC, na.rm = TRUE)
+  )
+
+ggplot(agg_data, aes(x = time, y = mean_GCC)) +
+  geom_line(color = "blue", size = 1) +
+  geom_ribbon(aes(ymin = mean_GCC - sd_GCC, ymax = mean_GCC + sd_GCC), alpha = 0.2) +
+  theme_minimal() +
+  labs(
+    title = "Mean GCC Thickness Over Time",
+    x = "Time (years)",
+    y = "Mean GCC Thickness (microns)"
+  )
+
+# 3. Individual GCC Trends (Spaghetti Plot)
+ggplot(data, aes(x = time, y = GCC, group = id)) +
+  geom_line(alpha = 0.3, color = "grey") +
+  theme_minimal() +
+  labs(
+    title = "Individual GCC Thickness Trends",
+    x = "Time (years)",
+    y = "GCC Thickness (microns)"
+  )
+
+```
+
+```{r}
+# Load required libraries
+library(tidyverse)
+
+# Load the dataset
+file_name <- "ADAP_Macula_GCC_dataset.csv"
+data <- read_csv(file_name)
+
+# Create a GCC group based on the median GCC value
+data <- data %>%
+  mutate(GCC_group = ifelse(GCC >= median(GCC, na.rm = TRUE), "High GCC", "Low GCC"))
+
+# Summary statistics for GCC by group
+gcc_summary <- data %>%
+  group_by(GCC_group) %>%
+  summarise(
+    Mean_GCC = mean(GCC, na.rm = TRUE),
+    SD_GCC = sd(GCC, na.rm = TRUE),
+    n = n()
+  )
+print(gcc_summary)
+
+# Summary statistics for base_age by group
+age_summary <- data %>%
+  group_by(GCC_group) %>%
+  summarise(
+    Mean_Age = mean(base_age, na.rm = TRUE), # Changed `age` to `base_age`
+    SD_Age = sd(base_age, na.rm = TRUE),
+    n = n()
+  )
+print(age_summary)
+
+# Independent t-test for GCC
+t_test_gcc <- t.test(GCC ~ GCC_group, data = data)
+print(t_test_gcc)
+
+# Independent t-test for base_age
+t_test_age <- t.test(base_age ~ GCC_group, data = data) # Changed `age` to `base_age`
+print(t_test_age)
+
+```
+
+```{r}
+# Load required libraries
+library(tidyverse)
+library(gt)
+
+# Create GCC group based on median
+data <- data %>%
+  mutate(GCC_group = ifelse(GCC >= median(GCC, na.rm = TRUE), "High GCC", "Low GCC"))
+
+# Summary statistics
+gcc_summary <- data %>%
+  group_by(GCC_group) %>%
+  summarise(
+    n = n(),
+    `GCC (Mean ± SD)` = paste0(
+      round(mean(GCC, na.rm = TRUE), 2), " ± ", round(sd(GCC, na.rm = TRUE), 2)
+    ),
+    `Base Age (Mean ± SD)` = paste0(
+      round(mean(base_age, na.rm = TRUE), 2), " ± ", round(sd(base_age, na.rm = TRUE), 2)
+    ),
+    `Time Range` = paste0("[", min(time, na.rm = TRUE), " - ", max(time, na.rm = TRUE), "]")
+  )
+
+# Add p-values
+t_test_gcc <- t.test(GCC ~ GCC_group, data = data)
+t_test_age <- t.test(base_age ~ GCC_group, data = data)
+
+gcc_summary <- gcc_summary %>%
+  mutate(
+    `GCC p-value` = ifelse(GCC_group == "High GCC", round(t_test_gcc$p.value, 3), ""),
+    `Base Age p-value` = ifelse(GCC_group == "High GCC", round(t_test_age$p.value, 3), "")
+  )
+
+# Create the table with gt
+table_1 <- gt(gcc_summary) %>%
+  tab_header(
+    title = "Characteristics of GCC Groups",
+    subtitle = "Comparing High GCC and Low GCC Groups"
+  ) %>%
+  cols_label(
+    GCC_group = "Group",
+    n = "n",
+    `GCC (Mean ± SD)` = "GCC (Mean ± SD)",
+    `Base Age (Mean ± SD)` = "Base Age (Mean ± SD)",
+    `Time Range` = "Time Range",
+    `GCC p-value` = "GCC p-value",
+    `Base Age p-value` = "Base Age p-value"
+  ) %>%
+  fmt_missing(columns = everything(), missing_text = "") %>%
+  tab_footnote(
+    footnote = "p-values come from t-tests for quantitative measures.",
+    locations = cells_column_labels(columns = c(`GCC p-value`, `Base Age p-value`))
+  ) %>%
+  tab_source_note(
+    source_note = "Table 1"
+  )
+
+# Display the table
+table_1
+
+```
+
+```{r}
+# Profile plot with group separation
+ggplot(data, aes(x = time, y = GCC, group = id, color = GCC_group)) +
+  geom_line(alpha = 0.3) +
+  stat_summary(fun = mean, geom = "line", size = 1.2, aes(group = GCC_group)) +
+  labs(title = "Individual GCC Thickness Trends by Group", x = "Time (years)", y = "GCC Thickness (µm)")
+
+```
+
+```{r}
+agg_data <- data %>%
+  group_by(time) %>%
+  summarise(mean_GCC = mean(GCC, na.rm = TRUE), sd_GCC = sd(GCC, na.rm = TRUE))
+
+ggplot(agg_data, aes(x = time, y = mean_GCC)) +
+  geom_line(size = 1, color = "blue") +
+  geom_ribbon(aes(ymin = mean_GCC - sd_GCC, ymax = mean_GCC + sd_GCC), alpha = 0.2) +
+  labs(title = "Population Mean GCC Thickness Over Time", x = "Time (years)", y = "Mean GCC Thickness (µm)")
+
+```
+
+```{r}
+# Add p-values with proper formatting
+gcc_summary <- gcc_summary %>%
+  mutate(
+    `GCC p-value` = ifelse(GCC_group == "High GCC", 
+                           ifelse(t_test_gcc$p.value < 0.001, "<0.001", round(t_test_gcc$p.value, 3)), ""),
+    `Base Age p-value` = ifelse(GCC_group == "High GCC", 
+                                ifelse(t_test_age$p.value < 0.001, "<0.001", round(t_test_age$p.value, 3)), "")
+  )
+
+# Create the table with gt
+table_1 <- gt(gcc_summary) %>%
+  tab_header(
+    title = "Characteristics of GCC Groups"
+  ) %>%
+  cols_label(
+    GCC_group = "Group",
+    n = "n",
+    `GCC (Mean ± SD)` = "GCC",
+    `Base Age (Mean ± SD)` = "Base Age",
+    `GCC p-value` = "GCC p",
+    `Base Age p-value` = "Age p"
+  ) %>%
+  fmt_missing(columns = everything(), missing_text = "") %>%
+  tab_footnote(
+    footnote = "p-values from t-tests.",
+    locations = cells_column_labels(columns = c(`GCC p-value`, `Base Age p-value`))
+  ) %>%
+  tab_source_note(
+    source_note = "Table 1"
+  )
+
+# Display the table
+table_1
+
+
+```
+
+```{r}
+# Load required libraries
+library(nlme)
+library(tidyverse)
+
+# Prepare the dataset
+data <- data %>%
+  mutate(
+    time_squared = time^2,   # Quadratic term
+    time_cubic = time^3      # Cubic term
+  )
+
+# Fit multiple models
+# Linear model
+model_linear <- lme(GCC ~ time, random = ~time | id, data = data, method = "REML")
+
+# Quadratic model
+model_quadratic <- lme(GCC ~ time + time_squared, random = ~time | id, data = data, method = "REML")
+
+# Cubic model
+model_cubic <- lme(GCC ~ time + time_squared + time_cubic, random = ~time | id, data = data, method = "REML")
+
+# Compare models using AIC
+aic_values <- data.frame(
+  Model = c("Linear", "Quadratic", "Cubic"),
+  AIC = c(AIC(model_linear), AIC(model_quadratic), AIC(model_cubic))
+)
+print(aic_values)
+
+# Determine the best model
+best_model <- aic_values[which.min(aic_values$AIC), ]
+cat("Best model:", best_model$Model, "with AIC =", best_model$AIC, "\n")
+
+# Add fitted values from the best model to the dataset
+data$fitted <- ifelse(
+  best_model$Model == "Linear", predict(model_linear),
+  ifelse(best_model$Model == "Quadratic", predict(model_quadratic), predict(model_cubic))
+)
+
+# Plot the best time trend
+ggplot(data, aes(x = time, y = GCC)) +
+  geom_point(alpha = 0.3, color = "gray") +
+  geom_line(aes(y = fitted), color = "blue", size = 1) +
+  labs(
+    title = paste("Best Time Trend for GCC Thickness:", best_model$Model),
+    x = "Time (years)",
+    y = "Predicted GCC Thickness (microns)"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+library(nlme)
+library(tidyverse)
+
+# Prepare the dataset with quadratic and cubic terms
+data <- data %>%
+  mutate(
+    time_squared = time^2,
+    time_cubic = time^3
+  )
+
+# Fit linear, quadratic, and cubic models
+model_linear <- lme(GCC ~ time, random = ~time | id, data = data, method = "REML")
+model_quadratic <- lme(GCC ~ time + time_squared, random = ~time | id, data = data, method = "REML")
+model_cubic <- lme(GCC ~ time + time_squared + time_cubic, random = ~time | id, data = data, method = "REML")
+
+# Compare models with AIC
+aic_values <- data.frame(
+  Model = c("Linear (time)", "Quadratic (time + time_squared)", "Cubic (time + time_squared + time_cubic)"),
+  AIC = c(AIC(model_linear), AIC(model_quadratic), AIC(model_cubic))
+)
+print(aic_values)
+
+# Select the best model
+best_model <- aic_values[which.min(aic_values$AIC), ]
+cat("Best model:", best_model$Model, "with AIC =", best_model$AIC, "\n")
+
+```
+
+```{r}
+# Load the necessary library
+library(nlme)
+library(dplyr)
+
+# Transform `time` into consecutive integers for each individual
+data <- data %>%
+  group_by(id) %>%
+  mutate(time_int = rank(time)) %>%
+  ungroup()
+
+# Fit models with different covariance structures
+models <- list()
+
+# 1. Random Intercept Only (RI)
+models$RI <- lme(fixed = GCC ~ time, random = ~ 1 | id, data = data, method = "REML")
+
+# 2. Random Intercept and Slope (RIAS)
+models$RIAS <- lme(fixed = GCC ~ time, random = ~ time | id, data = data, method = "REML")
+
+# 3. Compound Symmetry (CS)
+models$CS <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corCompSymm(form = ~ time | id), data = data, method = "REML")
+
+# 4. Autoregressive of order 1 (AR(1))
+models$AR1 <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corAR1(form = ~ time | id), data = data, method = "REML")
+
+# 5. Autoregressive Moving Average (ARMA(1,1))
+models$ARMA11 <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corARMA(p = 1, q = 1, form = ~ time | id), data = data, method = "REML")
+
+# 6. ARMA(2,1)
+models$ARMA21 <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corARMA(p = 2, q = 1, form = ~ time | id), data = data, method = "REML")
+
+# 7. ARMA(2,0)
+models$ARMA20 <- lme(fixed = GCC ~ time, random = ~ 1 | id, correlation = corARMA(p = 2, q = 0, form = ~ time | id), data = data, method = "REML")
+
+# 8. Toeplitz covariance structure (TOEP)
+models$TOEP <- lme(
+  fixed = GCC ~ time,
+  random = ~ 1 | id,
+  correlation = corAR1(form = ~ time | id),  # AR(1) for a Toeplitz-like structure
+  data = data,
+  method = "REML"
+)
+
+# Compare models using AIC
+model_comparison <- data.frame(
+  Model = names(models),
+  AIC = sapply(models, AIC)
+)
+
+# Sort models by AIC (lower is better)
+model_comparison <- model_comparison[order(model_comparison$AIC), ]
+
+# Print the comparison table
+print(model_comparison)
+
+```
+
+```{r}
+# Compare models again
+model_comparison <- data.frame(
+  Model = names(models),
+  AIC = sapply(models, AIC)
+)
+model_comparison <- model_comparison[order(model_comparison$AIC), ]
+print(model_comparison)
+
+```
+
+```{r}
+# Fit a Random Intercept and Slope (RIAS) model
+model_rias <- lme(fixed = GCC ~ time, random = ~time | id, data = data, method = "REML")
+
+# Extract the fixed-effect slope (population average rate of GCC loss)
+population_rate <- summary(model_rias)$tTable["time", "Value"]
+
+# Extract random effects (individual slopes)
+random_effects <- ranef(model_rias)
+
+# Extract individual slopes (random slopes added to the fixed slope)
+individual_rates <- random_effects$time + population_rate
+
+# Summarize individual rates
+individual_rate_summary <- data.frame(
+  Mean = mean(individual_rates),
+  SD = sd(individual_rates),
+  Min = min(individual_rates),
+  Max = max(individual_rates)
+)
+
+# Print the results
+cat("Population rate of GCC loss:", round(population_rate, 3), "microns/year\n")
+cat("Summary of individual rates:\n")
+print(individual_rate_summary)
+
+```
+
+```{r}
+# Load the required library
+library(gt)
+
+# Summarized data (from the results)
+rate_summary <- data.frame(
+  Statistic = c("Mean", "SD", "Min", "Max"),
+  `Value (microns per year)` = c(-0.821, 0.980, -4.483, 1.220)
+)
+
+# Create the table using `gt`
+table_5 <- rate_summary %>%
+  gt() %>%
+  tab_header(
+    title = "Table 5. Rates of Macular Thickness Loss",
+    subtitle = "Population Average and Individual Variability"
+  ) %>%
+  cols_label(
+    Statistic = "Statistic",
+    `Value (microns per year)` = "Value (microns per year)"
+  ) %>%
+  tab_source_note(
+    source_note = "Summary based on a linear mixed-effects model."
+  ) %>%
+  tab_footnote(
+    footnote = "The mean represents the population average rate of GCC loss. SD captures variability, while Min and Max indicate the range of individual rates.",
+    locations = cells_column_labels(columns = `Value (microns per year)`)
+  )
+
+# Display the table
+table_5
+
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+
+# Calculate population average rate of GCC loss using linear regression
+population_model <- lm(GCC ~ time, data = data)
+
+# Extract the fixed effect for time (slope)
+population_rate_of_change <- coef(population_model)["time"]
+
+# Estimate individual slopes using linear regression for each patient
+data_individual_slopes <- data %>%
+  group_by(id) %>%
+  summarize(
+    individual_slope = coef(lm(GCC ~ time))["time"], # Slope for each individual
+    .groups = "drop"
+  )
+
+# Summarize individual slopes
+slope_summary <- data_individual_slopes %>%
+  summarize(
+    min_slope = min(individual_slope),
+    max_slope = max(individual_slope),
+    mean_slope = mean(individual_slope),
+    sd_slope = sd(individual_slope)
+  )
+
+# Print results
+cat("Population Average Rate of GCC Loss:\n")
+cat(sprintf(" %.3f microns per year\n", population_rate_of_change))
+
+cat("\nIndividual Variability in Rate of GCC Loss:\n")
+cat(sprintf(" Range: %.3f to %.3f microns per year\n", slope_summary$min_slope, slope_summary$max_slope))
+cat(sprintf(" Mean: %.3f microns per year\n", slope_summary$mean_slope))
+cat(sprintf(" SD: %.3f microns per year\n", slope_summary$sd_slope))
+
+# Plot distribution of individual slopes
+ggplot(data_individual_slopes, aes(x = individual_slope)) +
+  geom_histogram(binwidth = 0.5, fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(
+    title = "Figure 3: Distribution of Individual Rates of GCC Loss",
+    x = "Rate of GCC Loss (microns/year)",
+    y = "Frequency"
+  )
+
+```
+
+```{r}
+library(nlme)
+library(dplyr)
+
+# Fit a mixed-effects model for population slope
+population_model <- lme(GCC ~ time, random = ~time | id, data = data, method = "REML")
+
+# Population slope
+population_rate_of_change <- summary(population_model)$tTable["time", "Value"]
+
+# Calculate individual slopes
+individual_slopes <- data %>%
+  group_by(id) %>%
+  summarize(individual_slope = coef(lm(GCC ~ time))["time"], .groups = "drop")
+
+# Summarize individual slopes
+slope_summary <- individual_slopes %>%
+  summarize(
+    mean_slope = mean(individual_slope),
+    sd_slope = sd(individual_slope),
+    min_slope = min(individual_slope),
+    max_slope = max(individual_slope)
+  )
+
+# Print results for comparison
+cat("Population Rate of GCC Loss: ", round(population_rate_of_change, 3), " microns per year\n")
+cat("Mean Individual Rate of GCC Loss: ", round(slope_summary$mean_slope, 3), " microns per year\n")
+
+```
+
+```{r}
+# Load necessary libraries
+library(nlme)
+library(ggplot2)
+
+# Base Model: Population intercept and slope only
+base_model <- lme(
+  fixed = GCC ~ time, 
+  random = ~ time | id,  # Random intercept and slope
+  data = data,
+  method = "REML"
+)
+
+# Include Age: Age-adjusted model
+age_model <- lme(
+  fixed = GCC ~ time + base_age,  # Add base_age as a fixed effect
+  random = ~ time | id,           # Random intercept and slope
+  data = data,
+  method = "REML"
+)
+
+# Summarize and compare models
+base_summary <- summary(base_model)
+age_summary <- summary(age_model)
+
+# Print model summaries
+cat("Base Model (No Age):\n")
+print(base_summary)
+
+cat("\nAge-Adjusted Model:\n")
+print(age_summary)
+
+# Extract fixed effects for interpretation
+fixed_effects_age <- fixef(age_model)
+cat("\nFixed Effects in Age-Adjusted Model:\n")
+print(fixed_effects_age)
+
+# Visualize the effects of age on GCC trends
+ggplot(data, aes(x = time, y = GCC, group = id, color = base_age)) +
+  geom_line(alpha = 0.7, size = 0.6) +  # Use lines for better differentiation by age
+  scale_color_gradient(low = "blue", high = "red") +  # Gradient color for age
+  theme_minimal() +
+  labs(
+    title = "Figure 6: Effect of Age on GCC Trends",
+    x = "Time (years)",
+    y = "GCC Thickness (microns)",
+    color = "Base Age"
+  )
+
+```
