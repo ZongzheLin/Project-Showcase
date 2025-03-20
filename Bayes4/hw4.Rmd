@@ -1,0 +1,190 @@
+---
+title: "Bayesian Linear Regression Analysis of Stockton Real Estate Data"
+author: "Zongzhe Lin"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Data Preparation and Model Fitting
+
+1. Clear the Workspace and Load Libraries.
+Explanation: This block clears the current workspace and loads the required packages.
+```{r clear-workspace, echo=TRUE}
+rm(list = ls())  # Clear all objects from the workspace
+library(rjags)    # Load rjags to interface with JAGS
+library(coda)     # Load coda for summarizing MCMC output
+```
+
+
+2. Set MCMC Parameters and Seed.
+Explanation: I set the parameters for the MCMC simulation and fix a seed to ensure reproducibility.
+```{r}
+nSamp   <- 10000   # Number of posterior samples to collect
+nChains <- 1       # Number of MCMC chains
+nAdapt  <- 200     # Number of adaptation iterations
+nBurn   <- 1000    # Number of burn-in iterations
+
+set.seed(1234)     # Set seed for reproducibility
+```
+
+3. Read and Preprocess the Data.
+Explanation: The data file is read and unnecessary columns are removed. The number of observations is stored in N.
+```{r}
+data <- read.table("stockton_real_estate.txt", header = TRUE)
+data <- data[, !(names(data) %in% c("Lat", "Longi"))]  # Remove 'Lat' and 'Longi'
+N <- nrow(data)  # Number of observations
+```
+
+4. Build the Design Matrix and Extract Outcome.
+Explanation: I extract the outcome variable Y and build the design matrix X (including an intercept). The number of regression coefficients is stored in p.
+```{r}
+Y <- data$Y
+# Create design matrix X: first column is intercept; then columns for X1 to X6
+X <- cbind(1, data$X1, data$X2, data$X3, data$X4, data$X5, data$X6)
+p <- ncol(X)  # Total number of regression coefficients (7 in this case)
+```
+
+
+5. Set Hyperparameters and Prepare Data for JAGS.
+Explanation: I define hyperparameters for the priors and then bundle all necessary data into the list jagsData for JAGS.
+```{r}
+# Set hyperparameters for the priors
+n0 <- 1.0E-6  # For beta: beta[j] ~ dnorm(0, n0 * tausq)
+a0 <- 0.001   # Shape parameter for tau's Gamma prior
+b0 <- 0.001   # Rate parameter for tau's Gamma prior
+
+# Create the data list for JAGS
+jagsData <- list(
+  Y = Y,
+  X = X,
+  N = N,
+  p = p,
+  n0 = n0,
+  a0 = a0,
+  b0 = b0
+)
+
+```
+
+
+6. Define Initial Values Function.
+Explanation: The function inits provides initial values for the unknown parameters.
+```{r}
+inits <- function() {
+  list(
+    beta = rep(0, p),   # Initialize beta as a vector of zeros
+    tausq = 1,          # Set initial value for tau
+    yFit = rep(0, N)     # Initialize yFit with zeros
+  )
+}
+
+```
+
+7. Compile and Run the JAGS Model.
+Explanation: I compile the JAGS model (using modelJags.txt), run the burn-in, and then collect posterior samples while monitoring the parameters of interest.
+```{r}
+# Compile the model using the model file "modelJags.txt"
+jagsModel <- jags.model(file = "modelJags.txt",
+                        data = jagsData,
+                        inits = inits,
+                        n.chains = nChains,
+                        n.adapt = nAdapt)
+
+# Run the burn-in phase
+update(jagsModel, n.iter = nBurn)
+
+# Specify parameters to monitor
+params <- c("beta", "tausq", "sigmasq", "yFit")
+
+# Draw posterior samples
+mOut <- coda.samples(model = jagsModel, variable.names = params, n.iter = nSamp)
+
+# Print overall summary of MCMC output
+print(summary(mOut))
+```
+
+
+
+
+
+
+## Posterior Analysis
+## 4. Clearly present posterior mean, posterior standard deviation, posterior median and 95% credible intervals for: (i) the regression slopes; (ii) the residual variance; and (iii) the model-fitted values of the data.
+8. Extract and Display Posterior Summaries.
+Explanation: I extract the posterior summary for the regression coefficients and remove the intercept row so that only slopes are displayed.
+The residual variance (sigmasq) summary is extracted and printed.
+For brevity, I show the summary for the first 10 fitted values (yFit).
+```{r}
+# Get overall summary statistics from the MCMC output
+s <- summary(mOut)
+
+# (4-i) Regression slopes: Exclude the intercept (beta[1]); slopes are beta[2] ... beta[p]
+beta_rows <- grep("^beta\\[", rownames(s$statistics))
+beta_summary <- cbind(s$statistics[beta_rows, ], s$quantiles[beta_rows, ])
+slopes <- beta_summary[-1, ]  # Remove intercept (beta[1])
+cat("Posterior summary for regression slopes (excluding intercept):\n")
+print(slopes)
+
+# (4-ii) Residual variance: Extract summary for 'sigmasq'
+res_var <- c(s$statistics["sigmasq", ], s$quantiles["sigmasq", ])
+cat("\nPosterior summary for residual variance (sigmasq):\n")
+print(res_var)
+
+# (4-iii) Model-fitted values: Show summary for the first 10 yFit values
+yfit_rows <- grep("^yFit\\[", rownames(s$statistics))
+yfit_summary <- cbind(s$statistics[yfit_rows, ], s$quantiles[yfit_rows, ])
+cat("\nPosterior summary for the first 10 model-fitted values (yFit):\n")
+print(yfit_summary[1:10, ])
+```
+
+
+## 5. Which of the covariates are statistically significant predictors of Y?
+9. Identify Significant Covariates.
+Explanation: For each slope (beta[2] ... beta[p]), I check whether its 2.5% and 97.5% quantiles have the same sign. A TRUE value indicates that the 95% credible interval does not include 0, meaning the covariate is statistically significant.
+```{r}
+# A slope is considered statistically significant if its 95% credible interval does not include 0.
+beta_quant <- as.data.frame(s$quantiles[beta_rows, ])
+# Exclude the intercept row (beta[1])
+slopes_quant <- beta_quant[-1, ]
+significant <- apply(slopes_quant, 1, function(q) {
+  (q["2.5%"] > 0 & q["97.5%"] > 0) | (q["2.5%"] < 0 & q["97.5%"] < 0)
+})
+cat("\nSignificance of covariates (TRUE means 95% CI does not include 0):\n")
+print(significant)
+```
+
+
+## 6. How many of the 95% credible intervals for the model-fitted values actually include the observed values?
+10. Coverage of Model-Fitted Values.
+Explanation: Using the 2.5% and 97.5% quantiles of each yFit, I determine how many observed Y values fall within the model-fitted 95% credible intervals.
+```{r}
+# Count how many yFit 95% credible intervals include the observed Y values.
+yfit_lower <- s$quantiles[yfit_rows, "2.5%"]
+yfit_upper <- s$quantiles[yfit_rows, "97.5%"]
+coverage <- sum(Y >= yfit_lower & Y <= yfit_upper)
+cat("\nOut of", length(Y), "observations, the 95% credible intervals for yFit include the observed Y in", coverage, "cases.\n")
+```
+
+
+
+
+## Conclusion
+Regression Slopes: The posterior summary for the slopes (beta[2]–beta[p]) is provided, and all slopes are statistically significant since their 95% credible intervals do not include 0.
+Residual Variance: The posterior mean of sigmasq is approximately 0.02380 with a narrow credible interval.
+Model-Fitted Values: The summary for the first 10 fitted values (yFit) is displayed; overall, the fitted values are in the same range as the observed Y.
+Coverage: Out of the total observations, the 95% credible intervals for yFit include the observed Y in a high percentage of cases (e.g., 1308 out of 1369), indicating that the model predictions are generally consistent with the data.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

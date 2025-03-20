@@ -1,0 +1,91 @@
+---
+title: "hw3"
+output:
+  html_document: default
+  pdf_document: default
+date: "2025-01-25"
+---
+
+## Zongzhe Lin
+## UID: 206328707
+
+```{r}
+# Read the two CSV files
+lung_cancer_data <- read.csv("rate_lung_cancer_with_smoking.csv")
+smoking_data <- read.csv("smoking.csv")
+
+# Remove any characters that are not letters (A-Za-z)
+smoking_data$County <- gsub("[^[:alpha:]]", "", smoking_data$County)
+lung_cancer_data$County <- gsub("[^[:alpha:]]", "", lung_cancer_data$County)
+
+# Merge the two datasets by the 'County' column
+merged_data <- merge(lung_cancer_data, smoking_data, by = "County", all = FALSE)
+
+# View the first few rows of the merged dataset
+head(merged_data)
+```
+
+
+
+
+
+#### Question1: Draw a scatter plot of lung cancer rates (Y) against smoking (X). Calculate the correlation between the two variables. 
+```{r}
+plot(merged_data$Smoking_Rate,
+     merged_data$Age_Adjusted_Rate,
+     xlab = "Smoking Rate (%)",
+     ylab = "Lung Cancer Rate (Age Adjusted)",
+     main = "Scatter Plot: Lung Cancer vs. Smoking Rate")
+
+cor(merged_data$Smoking_Rate, merged_data$Age_Adjusted_Rate)
+```
+A scatter plot of Age_Adjusted_Rate (Y) versus Smoking_Rate (X) shows an upward trend, and the correlation is approximately 0.62, indicating a moderately strong positive relationship.
+
+
+
+#### Question2: Fit a simple linear regression model: Y = beta0 + beta1*X + error in R to this dataset, where you can assume that the errors are distributed independently as N(0, sigma^2).
+```{r}
+lm_model <- lm(Age_Adjusted_Rate ~ Smoking_Rate, data = merged_data)
+```
+
+
+
+#### Question3:Provide the estimates of the intercept and the slope for this dataset. What are the 95% confidence intervals for these estimates? How would you conclude if the parameters are statistically significant or not only from looking at the 95% confidence intervals?
+
+```{r}
+# Display a summary of the fitted model:
+summary(lm_model)
+
+```
+The model yields an intercept estimate of about 26.12 and a slope estimate of about 1.35.
+
+
+```{r}
+# Compute 95% confidence intervals for both coefficients
+conf_intervals <- confint(lm_model, level = 0.95)
+conf_intervals
+```
+
+The 95% confidence interval for the intercept is roughly [19.22, 33.01], and for the slope is [0.89, 1.80].
+Since neither interval includes 0, both parameters are statistically significant at the 5% level.
+
+
+#### Question4: Is the impact of smoking rates on lung cancer rates in California counties statistically significant?
+Yes. The slope for Smoking_Rate is positive and its 95% confidence interval does not include zero. In other words, the p-value for that coefficient is highly significant (p < 0.001), indicating that smoking rates have a statistically significant effect on lung cancer rates in California counties.
+
+#### Question5: Find an estimate of the residual variance sigma^2. Is it also possible to find a 95% confidence interval of this residual variance from your R function?
+
+```{r}
+# Residual standard error (estimate of sigma)
+sigma_hat <- summary(lm_model)$sigma
+
+# Residual variance (sigma^2)
+sigma_sq_hat <- sigma_hat^2
+sigma_sq_hat
+```
+ The residual variance sigma^2 is 54.078.
+ 
+The built-in summary function does not return a 95% confidence interval for the residual variance. They only give regression coefficients, not for the residual variance. 
+
+
+

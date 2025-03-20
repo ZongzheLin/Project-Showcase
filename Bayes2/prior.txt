@@ -1,0 +1,2 @@
+priorMean priorSampleSize shape rate
+0 9e-6 2 3
